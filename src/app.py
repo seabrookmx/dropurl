@@ -1,5 +1,6 @@
 import aiofiles
 from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 import os
 import subprocess
@@ -37,8 +38,35 @@ def get_name(extension: str) -> str:
 
 app = FastAPI()
 api = FastAPI()
+
+
 app.mount("/api", api)
-app.mount("/", StaticFiles(directory="../static"), name="static")
+
+
+@app.get("/", status_code=200, response_class=HTMLResponse)
+async def index():
+    return '''
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>dropurl</title>
+            <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet">
+        </head>
+        <body class="container">
+            <div id="_pane" class="mx-auto text-center">
+            <p>Upload your files here to be provided with a short link you can share.</p>
+            <p>Max file size is 100MB.</p>
+            </div>
+            <div id="_pane" class="mx-auto text-center">
+            <form action="/api/upload/" enctype="multipart/form-data" method="post">
+                <input name="file" type="file" multiple>
+                <button name="subject" type="submit">Upload</button>
+            </form>
+            </div>
+        </body>
+        </html>
+    '''
 
 
 @api.get("/healthcheck")
@@ -46,7 +74,7 @@ async def root():
     return {"healthy": "yes"}
 
 
-@api.post("/upload/", status_code=201)
+@api.post("/upload/", status_code=201, response_class=HTMLResponse)
 async def create_upload_file(file: UploadFile = File(...)):
     if dir_size() > MAX_DIR_SIZE_BYTES:
         raise HTTPException(status_code=507, detail="Storage limit reached")
@@ -70,6 +98,32 @@ async def create_upload_file(file: UploadFile = File(...)):
 
             await out_file.write(bytes)
 
-    return {'filename': URL_PREFIX + rng_filename}
+    full_url = URL_PREFIX + rng_filename
+    return f'''
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>dropurl</title>
+            <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet">
+        </head>
+        <body class="container">
+            <div id="_pane" class="mx-auto text-center">
+            Your link is below.
+            <br>
+            <a href={full_url}>{full_url}</a>
+            <button onclick="clipbrd()">Copy To Clipboard</button>
+            <br>
+            <a href="/"><- Back to upload</a>
+            </div>
 
-print('Booted..')
+            <script>
+                function clipbrd() {{
+                    navigator.clipboard.writeText('{full_url}');
+                }}
+            </script>
+        </body>
+        </html>
+    '''
+
+print('Started..')
